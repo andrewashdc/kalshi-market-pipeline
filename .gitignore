@@ -2,3 +2,6 @@ config.py
 venv/
 *.pem
 *.txt
+.env
+__pycache__/
+.DS_Store
