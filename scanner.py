@@ -12,29 +12,49 @@ conf.api_key_id = config.KEY_ID
 conf.private_key_pem = config.PRIVATE_KEY
 client = KalshiClient(conf)
 
-# 2. List the Tickers you want to watch
-WATCHLIST = ['KXMVESPORTSMULTIGAMEEXTENDED-S20266A70F1D57FE-4359ED59184'] 
+def get_live_ticker():
+    # Find 1 open market
+    response = client.get_markets(limit=1, status="open")
+    return response.markets[0].ticker
 
-print(f"--- LIVE MARKET SCANNER ---")
-print("Press Ctrl+C to stop scanning.\n")
+def is_market_open(ticker):
+    # Check the specific market's status
+    market_response = client.get_market(ticker)
+    return market_response.market.status == "open"
 
-# Wrap the scanner in an infinite loop
+# Initial setup
+current_ticker = get_live_ticker()
+print(f"Tracking new live market: {current_ticker}")
+
+last_status_check = time.time()
+check_interval = 12 * 60 * 60  # 12 hours in seconds
+
 while True:
-    for ticker in WATCHLIST:
-        try:
-            # Get the specific market data
-            market = client.get_market(ticker)
-            title = market.market.title
+    try:
+        # --- 1. SCANNING LOGIC ---
+        market_response = client.get_market(current_ticker)
+        market_data = market_response.market
+        
+        if market_data.yes_bid:
+            print(f"{current_ticker} Active Yes Bid: {market_data.yes_bid}")
+        else:
+            print(f"{current_ticker} Scanning... (No active Yes bids right now)")
+        
+        # --- 2. 12-HOUR REFRESH LOGIC ---
+        if time.time() - last_status_check > check_interval:
+            print("\n12 hours passed. Verifying market status...")
             
-            # Check if there is an active bid before doing math
-            if market.market.yes_bid is not None:
-                price = market.market.yes_bid / 100
-                print(f"{ticker}: ${price:.2f} | {title}")
+            if not is_market_open(current_ticker):
+                print("Market closed. Finding a new live market...\n")
+                current_ticker = get_live_ticker()
             else:
-                print(f"{ticker}: No active bids | {title}")
-                
-        except Exception as e:
-            print(f"Could not find {ticker}. Error: {e}")
+                print("Market still open. Keeping it.\n")
             
-    # Pause for 5 seconds before scanning again so Kalshi doesn't block you
-    time.sleep(5)
+            last_status_check = time.time()
+        
+        # Standard loop delay so we don't hit rate limits
+        time.sleep(5)
+
+    except KeyboardInterrupt:
+        print("\nScanner gracefully stopped.")
+        break
